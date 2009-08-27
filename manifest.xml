@@ -10,4 +10,5 @@
   <depend package="roscpp"/>
   <depend package="opencv_latest"/>
   <depend package="sensor_msgs"/>
+  <depend package="image_publisher" />
 </package>
