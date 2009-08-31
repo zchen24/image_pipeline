@@ -1987,3 +1987,5 @@ ImageData::convertBayerBGGRMono(uint8_t *src, uint8_t *dstm,
     }
 
 }
+
+
