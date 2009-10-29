@@ -336,6 +336,7 @@ private:
   bool do_stereo_;
   bool do_calc_points_;
   bool do_keep_coords_;
+  bool is_rectified_;
 
   image_transport::Publisher pub_mono_l_;
   image_transport::Publisher pub_rect_l_;
@@ -369,6 +370,7 @@ public:
     lnh.param("do_stereo", do_stereo_, true);
     lnh.param("do_calc_points", do_calc_points_, true);
     lnh.param("do_keep_coords", do_keep_coords_, true);
+    lnh.param("is_rectified", is_rectified_, false);
 
     // set up stereo structures
     if (do_keep_coords_) {
@@ -376,8 +378,8 @@ public:
     }
     // Must do stereo if calculating points
     do_stereo_ = do_stereo_ || do_calc_points_;
-    // Must rectify if doing stereo
-    do_rectify_ = do_rectify_ || do_stereo_;
+    // Must rectify if doing stereo (unless images are already rectified)
+    do_rectify_ = (do_rectify_ || do_stereo_) && !is_rectified_;
 
     stdata_ = new cam::StereoData;
 
@@ -497,8 +499,16 @@ public:
     stdata_->hasDisparity = false;
 
     // copy data
-    cam_bridge::RawToCamData(*raw_image_l, *cam_info_l, cam::IMAGE_RAW, img_data_l);
-    cam_bridge::RawToCamData(*raw_image_r, *cam_info_r, cam::IMAGE_RAW, img_data_r);
+    if (is_rectified_)
+      {
+	cam_bridge::RawToCamData(*raw_image_l, *cam_info_l, cam::IMAGE_RECT, img_data_l);
+	cam_bridge::RawToCamData(*raw_image_r, *cam_info_r, cam::IMAGE_RECT, img_data_r);
+      }
+    else
+      {
+	cam_bridge::RawToCamData(*raw_image_l, *cam_info_l, cam::IMAGE_RAW, img_data_l);
+	cam_bridge::RawToCamData(*raw_image_r, *cam_info_r, cam::IMAGE_RAW, img_data_r);
+      }
 
     // check rectification parameters
     if (fabs(img_data_l->K[2]) < 1e-10 ||
@@ -549,16 +559,18 @@ public:
 	 (pub_disparity_image_ && pub_disparity_image_.getNumSubscribers() > 0) ||
 	 (pub_pts_ && pub_pts_.getNumSubscribers() > 0)))
       {
-	//	ROS_INFO("[stereo_image_proc] Disparity calc");
+	//ROS_INFO("[stereo_image_proc] Disparity calc");
 	stdata_->doDisparity();
       }
 
     if (do_calc_points_ &&
 	(pub_pts_ && pub_pts_.getNumSubscribers() > 0) )
       {
-	//	ROS_INFO("[stereo_image_proc] 3D Points calc");
+	//ROS_INFO("[stereo_image_proc] 3D Points calc");
 	stdata_->doCalcPts();
       }
+
+    //ROS_INFO("[stereo_image_proc] Publishing images.");
 
     // Publish images
     img_.header.stamp = raw_image_l->header.stamp;
@@ -567,17 +579,25 @@ public:
     // left
     publishImage(img_data_l->imType, img_data_l->im, img_data_l->imSize, pub_mono_l_);
     publishImage(img_data_l->imColorType, img_data_l->imColor, img_data_l->imColorSize, pub_color_l_);
-    publishImage(img_data_l->imRectType, img_data_l->imRect, img_data_l->imRectSize, pub_rect_l_);
-    publishImage(img_data_l->imRectColorType, img_data_l->imRectColor, img_data_l->imRectColorSize, pub_rect_color_l_);
+    if (do_rectify_)
+      {
+	publishImage(img_data_l->imRectType, img_data_l->imRect, img_data_l->imRectSize, pub_rect_l_);
+	publishImage(img_data_l->imRectColorType, img_data_l->imRectColor, img_data_l->imRectColorSize, pub_rect_color_l_);
+      }
     // right
     publishImage(img_data_r->imType, img_data_r->im, img_data_r->imSize, pub_mono_r_);
     publishImage(img_data_r->imColorType, img_data_r->imColor, img_data_r->imColorSize, pub_color_r_);
-    publishImage(img_data_r->imRectType, img_data_r->imRect, img_data_r->imRectSize, pub_rect_r_);
-    publishImage(img_data_r->imRectColorType, img_data_r->imRectColor, img_data_r->imRectColorSize, pub_rect_color_r_);
+    if (do_rectify_)
+      {
+	publishImage(img_data_r->imRectType, img_data_r->imRect, img_data_r->imRectSize, pub_rect_r_);
+	publishImage(img_data_r->imRectColorType, img_data_r->imRectColor, img_data_r->imRectColorSize, pub_rect_color_r_);
+      }
 
     // disparity
     if (stdata_->hasDisparity)
       {
+	//ROS_INFO("[stereo_image_proc] Publishing disparity.");
+
 	dimg_.header.stamp = raw_image_l->header.stamp;
 	dimg_.header.frame_id = raw_image_l->header.frame_id;
 	dimg_.dpp = stdata_->dpp;
@@ -602,6 +622,8 @@ public:
     // point cloud
     if (stdata_->numPts > 0)
       {
+	//ROS_INFO("[stereo_image_proc] Publishing point cloud.");
+
         new_point_cloud::FastPointCloud cloud_;
 	cloud_.header.stamp = raw_image_l->header.stamp;
 	cloud_.header.frame_id = raw_image_l->header.frame_id;
@@ -636,6 +658,8 @@ public:
 	}
 	pub_pts_.publish(cloud_);
       }
+
+    //ROS_INFO("[stereo_image_proc] Done publishing.");
   }
 
 
@@ -736,6 +760,7 @@ int main(int argc, char **argv)
       */
       ROS_WARN("[stereo_image_proc] Output will be in /stereo/, remap <output> to change");
     }
+
 
   StereoProc proc(nh);
 

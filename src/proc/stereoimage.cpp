@@ -324,7 +324,7 @@ StereoData::doDisparity(stereo_algorithm_t alg)
   uint8_t *lim, *rim;
 
   // first do any rectification necessary
-  doRectify();
+  //doRectify();
 
   // check if disparity is already present
   if (hasDisparity)
@@ -412,10 +412,10 @@ StereoData::doDisparity(stereo_algorithm_t alg)
   }
 
 
-
   hasDisparity = true;
 
   doSpeckle();
+
   return true;
 }
 
