@@ -246,6 +246,8 @@ namespace cam
                               int width, int height, color_conversion_t colorAlg);
     void convertBayerBGGRMono(uint8_t *src, uint8_t *dstm,
                               int width, int height, color_conversion_t colorAlg);
+
+    void fixMap();
   };
 
 }

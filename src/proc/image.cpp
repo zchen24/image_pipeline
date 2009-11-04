@@ -40,6 +40,7 @@
 
 #include "image_proc/image.h"
 
+#include <ros/ros.h> //TODO: this definitely has to go
 #include <sstream>
 #include <iostream>
 
@@ -174,12 +175,107 @@ ImageData::initRectify(bool force)
   mx = cvCreateMat(imHeight, imWidth, CV_32FC1);
   my = cvCreateMat(imHeight, imWidth, CV_32FC1);
   cvInitUndistortRectifyMap(rK,rD,rR,rKp,mx,my);
+
+  fixMap();
+
   cvConvertMaps(mx,my,rMapxy,rMapa);
 
   initRect = true;
   return true;
 }
 
+// Scale the transformation
+
+void ImageData::fixMap()
+{
+  std::stringstream ss;
+  int left=imWidth/2, top=imHeight/2, bot=imHeight/2, right=imWidth/2;
+  //Flags to determine if the corresponding edge has been found
+  bool l, t, b, r; l=t=b=r=false;
+  while(!(l && t && b && r))
+  {
+    if(!l)
+    {
+      for(int i=top; i<=bot; i++)
+      {
+        float X = cvmGet(mx, i, left-1);
+        float Y = cvmGet(my, i, left-1);
+        if(X<0.0f || X>(float)imWidth || Y<0.0f || Y>(float)imHeight)
+        {
+          l = true;
+          break;
+        }
+      }
+      if(!l)
+        left--;
+    }
+
+    if(!t)
+    {
+      for(int i=left; i<=right; i++)
+      {
+        float X = cvmGet(mx, top-1, i);
+        float Y = cvmGet(my, top-1, i);
+        if(X<0.0f || X>(float)imWidth || Y<0.0f || Y>(float)imHeight)
+        {
+          t = true;
+          break;
+        }
+      }
+      if(!t)
+        top--;
+    }
+
+    if(!r)
+        {
+          for(int i=top; i<=bot; i++)
+          {
+            float X = cvmGet(mx, i, right+1);
+            float Y = cvmGet(my, i, right+1);
+            if(X<0.0f || X>(float)imWidth || Y<0.0f || Y>(float)imHeight)
+            {
+              r = true;
+              break;
+            }
+          }
+          if(!r)
+            right++;
+        }
+
+    if(!b)
+        {
+          for(int i=left; i<=right; i++)
+          {
+            float X = cvmGet(mx, bot+1, i);
+            float Y = cvmGet(my, bot+1, i);
+            if(X<0.0f || X>(float)imWidth || Y<0.0f || Y>(float)imHeight)
+            {
+              b = true;
+              break;
+            }
+          }
+          if(!b)
+            bot++;
+        }
+  }
+
+  int w = right-left;
+  int h = bot-top;
+  CvMat* newMx = cvCreateMat(h, w, CV_32FC1);
+  CvMat* newMy = cvCreateMat(h, w, CV_32FC1);
+
+  for(int i=0; i<h; i++)
+    for(int j=0; j<w; j++)
+    {
+      cvmSet(newMx, i, j, cvmGet(mx, i+top, j+left));
+      cvmSet(newMy, i, j, cvmGet(my, i+top, j+left));
+    }
+  cvResize(newMx, mx);
+  cvResize(newMy, my);
+
+  //ss<<std::endl<<"Rectangle is (L,T,R,B): ("<<left<<","<<top<<","<<right<<","<<bot<<")"<<std::endl;
+  //ROS_INFO("%s", ss.str().c_str());
+}
 
 bool
 ImageData::doRectify()
